@@ -68,7 +68,7 @@ local function error_message(operation, pc, msg)
 	return string.format("Error: \"%s\" failed at %i: %s", operation, pc - 1, msg)
 end
 
-local function execute_brainfuck(code, input)
+local function execute_brainfuck(code, input, print_numbers, read_numbers)
 	-- parse
 	local instructions = parse_brainfuck(code)
 	local prog_end = #instructions
@@ -111,7 +111,11 @@ local function execute_brainfuck(code, input)
 			arr[ptr] = (arr[ptr] + 255) % 256
 
 		elseif instr == "." then
-			output = output .. string.char(arr[ptr])
+			if print_numbers then
+				output = output .. arr[ptr] .. " "
+			else
+				output = output .. string.char(arr[ptr])
+			end
 
 		elseif instr == "," then
 			--~ if input_ptr > input_length then
@@ -121,7 +125,13 @@ local function execute_brainfuck(code, input)
 			if input_ptr > input_length then
 				num = 0
 			else
-				num = string.byte(input, input_ptr)
+				if read_numbers then
+					local next_space = input:find(" ", input_ptr, true) or (#input + 1)
+					num = tonumber(input:sub(input_ptr, next_space - 1)) or 0
+					input_ptr = next_space
+				else
+					num = string.byte(input, input_ptr)
+				end
 			end
 			if not (num >= 0 and num < 256) then
 				return false, error_message(",", pc, "input is not ASCII at " .. input_ptr)
@@ -153,22 +163,32 @@ end
 ---------------------------
 
 minetest.register_chatcommand("brainfuck", {
-	params = "[input=\"<input>\" ]<brainfuck code>",
+	params = "[input=\"<input>\" ][print_numbers ][read_numbers ]<brainfuck code>",
 	description = "Executes given brainfuck code",
 	privs = {},
 	func = function(name, param)
-		local input, code
+		local input = ""
 		if param:sub(1, 7) == "input=\"" then
 			local in_end = param:find("\" ", 8, false)
 			if not in_end then
 				return false, "Error: Could not find enclosing \" for input."
 			end
 			input = param:sub(8, in_end - 1)
-			code = param:sub(in_end + 2)
-		else
-			input = ""
-			code = param
+			param = param:sub(in_end + 2)
 		end
-		return execute_brainfuck(code, input)
+
+		local print_numbers = false
+		if param:sub(1, 14) == "print_numbers " then
+			print_numbers = true
+			param = param:sub(15)
+		end
+
+		local read_numbers = false
+		if param:sub(1, 13) == "read_numbers " then
+			read_numbers = true
+			param = param:sub(14)
+		end
+
+		return execute_brainfuck(param, input, print_numbers, read_numbers)
 	end,
 })
